@@ -6,7 +6,7 @@
 #   n is the number of cities (default is 10)
 #   range is the maximum a and y values (default is 500)
 #
-n=${1:-10}
+n=${1:-16}
 range=${2:-500}
 
 awk -v n=$n -v range=$range '
