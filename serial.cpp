@@ -24,8 +24,9 @@ void traverse(Vertex* vert) { // traverse and print from passed vertex through t
 }
 
 void hamiltonian(Vertex* vert) { // helper for traverse
+    std::cout<<"Start traversal"<<std::endl;
     traverse(vert);
-    std::cout<<vert->name<<std::endl;
+    // std::cout<<vert->name<<std::endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -82,5 +83,6 @@ int main(int argc, char *argv[]) {
     //     std::cout<<"weight: "<<vertexes[i].weight<<std::endl;
     // }
 
-    // hamiltonian(&vertexes[0]);
+    hamiltonian(&vertexes[0]);
+    std::cout<<"Finished!"<<std::endl;
 }
