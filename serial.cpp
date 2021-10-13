@@ -17,16 +17,15 @@ struct Edge {
 };
 
 void traverse(Vertex* vert) { // traverse and print from passed vertex through tree
-    std::cout<<vert->name<<std::endl;
+    // std::cout<<vert->name<<std::endl; // uncomment to print city names
     if (vert->children.size() > 0) {
         for (Vertex* child : vert->children) {traverse(child);}
     }
 }
 
 void hamiltonian(Vertex* vert) { // helper for traverse
-    std::cout<<"Start traversal"<<std::endl;
+    // std::cout<<"Start traversal"<<std::endl;
     traverse(vert);
-    // std::cout<<vert->name<<std::endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -35,6 +34,9 @@ int main(int argc, char *argv[]) {
         Vertex v = {std::stof(argv[i], nullptr), i/3 - 1};
         vertexes.push_back(v);
     }
+
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
     std::vector<Edge> edges;
     std::vector<bool> selected(vertexes.size());
@@ -53,9 +55,6 @@ int main(int argc, char *argv[]) {
 
                         if (weight < minimum) {
                             minimum = weight;
-                            // std::cout<<"minimum: "<<minimum<<std::endl;
-                            // std::cout<<"i: "<<vertexes[i].name<<std::endl;
-                            // std::cout<<"j: "<<vertexes[j].name<<std::endl;
                             to_add.weight = weight;
                             to_add.start = &vertexes[i];
                             to_add.end = &vertexes[j];}
@@ -63,26 +62,16 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
-        // std::cout<<"weight: "<<to_add.weight<<std::endl;
-        // std::cout<<"start: "<<to_add.start->name<<std::endl;
-        // std::cout<<"end: "<<to_add.end->name<<std::endl;
+
         vertexes[to_add.start->name].children.push_back(to_add.end);
         vertexes[to_add.end->name].parent = to_add.start;
         edges.push_back(to_add);
         selected[to_add.end->name] = true;
     }
-    // for (int i = 0; i < edges.size(); i++) {
-    //     std::cout<<"edges["<<i<<"]: "<<std::endl;
-    //     std::cout<<"weight: "<<edges[i]->weight<<std::endl;
-    //     std::cout<<"start: "<<edges[i]->start->name<<std::endl;
-    //     std::cout<<"end: "<<edges[i]->end->name<<std::endl;
-    // }
-    // for (int i = 0; i < vertexes.size(); i++) {
-    //     std::cout<<"vertexes["<<i<<"]: "<<std::endl;
-    //     std::cout<<"name: "<<vertexes[i].name<<std::endl;
-    //     std::cout<<"weight: "<<vertexes[i].weight<<std::endl;
-    // }
 
     hamiltonian(&vertexes[0]);
-    std::cout<<"Finished!"<<std::endl;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    uint64_t diff = (1000000000L * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec) / 1e6;
+
+    std::cout<<"Finished in "<<diff<<" ms!"<<std::endl;
 }

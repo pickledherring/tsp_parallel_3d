@@ -156,7 +156,7 @@ void gather_verts(std::vector<Vertex*> vert_cuts[], int n_processes) {
 }
 
 void traverse(Vertex* vert) { // traverse and print from passed vertex through tree
-    std::cout<<vert->name<<std::endl;
+    // std::cout<<vert->name<<std::endl; // uncomment to print city names
     if (vert->children.size() > 0) {
         for (Vertex* child : vert->children) {traverse(child);}
     }
@@ -179,7 +179,7 @@ void hamiltonian(std::vector<Vertex*>* vert_cuts, int mins[], int n_sectors) {
         }
     }
 
-    std::cout<<"Start traversal"<<std::endl;
+    // std::cout<<"Start traversal"<<std::endl;
     // vert_cuts[0][0] has no parent, must start there
     traverse(vert_cuts[0][0]);
 }
@@ -214,6 +214,11 @@ int main(int argc, char *argv[]) {
 
     std::vector<int> vert_cut_names[n_processes];
     std::vector<Vertex*> vert_cuts[n_processes];
+
+    struct timespec start, end;
+    if (rank == 0) {
+        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    }
 
     for (int i = 0; i < n_processes; i++) {
         for (int j = 0; j < vertexes.size(); j++) {
@@ -255,7 +260,10 @@ int main(int argc, char *argv[]) {
 
     if (rank == 0) {
         hamiltonian(vert_cuts, mins, n_processes);
-        std::cout<<"Finished!"<<std::endl;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+        uint64_t diff = (1000000000L * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec) / 1e6;
+
+        std::cout<<"Finished in "<<diff<<" ms!"<<std::endl;
     }
     return 0;
 }

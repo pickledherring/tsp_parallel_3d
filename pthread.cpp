@@ -68,7 +68,7 @@ void* MST(void* vertexes) {
 }
 
 void traverse(Vertex* vert) { // traverse and print from passed vertex through tree
-    std::cout<<vert->name<<std::endl;
+    // std::cout<<vert->name<<std::endl; // uncomment to print city names
     if (vert->children.size() > 0) {
         for (Vertex* child : vert->children) {traverse(child);}
     }
@@ -90,7 +90,7 @@ void hamiltonian(std::vector<Vertex*>* vert_cuts, std::vector<int> mins, int n_s
         }
     }
 
-    std::cout<<"Start traversal"<<std::endl;
+    // std::cout<<"Start traversal"<<std::endl;
     // vert_cuts[0][0] has no parent, must start there
     traverse(vert_cuts[0][0]);
 }
@@ -116,6 +116,9 @@ int main(int argc, char *argv[]) {
     float size = 500 / rows;
 
     // start threaded code
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+
     for (int i = 0; i < n_threads; i++) {
         for (int j = 0; j < vertexes.size(); j++) {
             if ((vertexes[j].coords[0] > i / rows * size)
@@ -141,6 +144,9 @@ int main(int argc, char *argv[]) {
 
     free(threads);
     hamiltonian(vert_cuts, min_from_sector, n_threads);
-    std::cout<<"Finished!"<<std::endl;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    uint64_t diff = (1000000000L * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec) / 1e6;
+
+    std::cout<<"Finished in "<<diff<<" ms!"<<std::endl;
     return 0;
 }
