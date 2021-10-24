@@ -1,5 +1,5 @@
-todo: mpi
-mpi: mpi.cpp
-	mpicxx mpi.cpp -o mpi -std=c++17
+todo: new_mpi
+new_mpi: new_mpi.cpp
+	mpicxx new_mpi.cpp -o new_mpi -std=c++17
 clean:
-	rm mpi
+	rm new_mpi
