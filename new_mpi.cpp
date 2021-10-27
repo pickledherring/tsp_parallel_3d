@@ -16,11 +16,6 @@ struct Vertex {
     std::vector<Vertex*> children;
 };
 
-// struct Edge {
-//     float weight;
-//     Vertex* start, * end;
-// };
-
 void gen_verts(int rank, int n_cities, int n_processes, std::vector<Vertex> &verts)
 // creates cities for each process, equally divides n_cities among them
 {
@@ -194,6 +189,97 @@ void row_join(int &rank, int &n_cities, int &n_processes, std::vector<Vertex> &c
     }
 }
 
+void col_join(int &rank, int &n_cities, int &n_processes, std::vector<Vertex> &cycle,
+            float inf_max, float dist_max, int start, int end) {
+    int width = (int)sqrt(n_processes);
+    int row = rank / width;
+    int range = end - start;
+    int mid = start + range / 2;
+    // stop criteria
+    if (range > 1) {
+        if (row > mid) {col_join(rank, n_cities, n_processes, cycle, inf_max, dist_max, mid + 1, end);}
+        if (row <= mid) {col_join(rank, n_cities, n_processes, cycle, inf_max, dist_max, start, mid);}
+    }
+
+    // receive if start, compute lowest cost for new edges between cycles, join
+    if (row == start) {
+        int msg_size = log2(range + 1) * (n_cities / n_processes) * width * 4;
+        float rec_cycle[msg_size];
+        int source = width * (mid + 1);
+        MPI_Status Stat;
+        MPI_Recv(&rec_cycle, msg_size, MPI_FLOAT, source, 0, MPI_COMM_WORLD, &Stat);
+
+        // create vector of vertexes out of received data
+        std::vector<Vertex> vec_rec_cycle;
+        for (int i = 0; i < (msg_size / 4); i++) {
+            Vertex new_vert = {
+                rec_cycle[i * 4],
+                (int)rec_cycle[i * 4 + 1],
+                {rec_cycle[i * 4 + 2], rec_cycle[i * 4 + 3]}
+            };
+            vec_rec_cycle.push_back(new_vert);
+        }
+
+        // minimum cost edges to switch
+        float min = FLT_MAX;
+        int l_index = 0;
+        int r_index = 0;
+        for (int i = 0; i < cycle.size(); i++) {
+            float dist_left = edge_weight(cycle[i], cycle[i + 1], inf_max, dist_max);
+
+            for (int j = 0; j < vec_rec_cycle.size(); j++) {
+                float dist_right = edge_weight(vec_rec_cycle[j], vec_rec_cycle[j + 1], inf_max, dist_max);
+                float dist_upper = edge_weight(cycle[i], vec_rec_cycle[j + 1], inf_max, dist_max);
+                float dist_lower = edge_weight(cycle[i + 1], vec_rec_cycle[j], inf_max, dist_max);
+                float cost = dist_upper + dist_lower - dist_left - dist_right;
+
+                if (cost < min) {
+                    min = cost;
+                    l_index = i;
+                    r_index = j;
+                }
+            }
+        }
+        std::cout<<"rank "<<rank<<" has vertexes: "<<std::endl;
+        std::cout<<"from cycle: "<<std::endl;
+        for (int i = 0; i < cycle.size(); i++) {
+            std::cout<<"\t"<<cycle[i].name;
+        }
+        std::cout<<std::endl;
+        std::cout<<"from vec_rec_cycle: "<<std::endl;
+        for (int i = 0; i < vec_rec_cycle.size(); i++) {
+            std::cout<<"\t"<<vec_rec_cycle[i].name;
+        }
+        std::cout<<std::endl;
+        // the joining
+        if (r_index > 0) {
+            cycle.insert(cycle.begin() + l_index + 1, vec_rec_cycle.begin(), vec_rec_cycle.begin() + r_index + 1);
+        }
+        cycle.insert(cycle.begin() + l_index + 1, vec_rec_cycle.begin() + r_index + 1, vec_rec_cycle.end());
+        
+        std::cout<<"rank "<<rank<<" has vertexes: "<<std::endl;
+        for (int i = 0; i < cycle.size(); i++) {
+            std::cout<<"\t"<<cycle[i].name;
+        }
+        std::cout<<std::endl;
+    }
+
+    // send if mid + 1
+    if (row ==  mid + 1) {
+        // convert cycle to floats for message passing
+        float float_cycle[4 * cycle.size()];
+        for (int i = 0; i < cycle.size(); i++) {
+            float_cycle[i * 4] = cycle[i].weight;
+            float_cycle[i * 4 + 1] = (float)cycle[i].name;
+            float_cycle[i * 4 + 2] = cycle[i].coords[0];
+            float_cycle[i * 4 + 3] = cycle[i].coords[1];
+        }
+        int msg_size = log2(range + 1) * (n_cities / n_processes) * width * 4;
+        int dest = width * start;
+        MPI_Send(&float_cycle, msg_size, MPI_FLOAT, dest, 0, MPI_COMM_WORLD);
+    }
+}
+
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     int n_processes, rank, n_cities;
@@ -246,8 +332,12 @@ int main(int argc, char** argv) {
     MST(verts, inf_max, dist_max);
     std::vector<Vertex> cycle = build_cycle(verts);
 
-    // stitch by row
+    // stitch by row, then column
     row_join(rank, n_cities, n_processes, cycle, inf_max, dist_max, 0, (int)sqrt(n_processes) - 1);
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (rank % (int)sqrt(n_processes) == 0) {
+        col_join(rank, n_cities, n_processes, cycle, inf_max, dist_max, 0, (int)sqrt(n_processes) - 1);
+    }
 
     // end timing
 
