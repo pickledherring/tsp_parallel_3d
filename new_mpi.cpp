@@ -49,9 +49,8 @@ float edge_weight(Vertex &left, Vertex &right, float inf_max, float dist_max) {
 }
 
 void MST(std::vector<Vertex> &verts, float inf_max, float dist_max) {
-    // make a tree from the vertexes, optimal but might cross edges, then make cycle
-    // build the tree
-    std::vector<bool> selected(verts.size(), false);
+    // build a minimum spanning tree
+    std::vector<bool> selected(verts.size(), false);  // which vertexes are in the tree
     selected[0] = true;
     int n_edges = 0;
     while (n_edges < verts.size() - 1) {
@@ -64,7 +63,6 @@ void MST(std::vector<Vertex> &verts, float inf_max, float dist_max) {
                         float norm = edge_weight(verts[i], verts[j], inf_max, dist_max);
 
                         if (norm < weight_min) {
-                            // std::cout<<i<<" and "<<j<<" have new normal: "<<norm<<std::endl;
                             weight_min = norm;
                             start = i;
                             end = j;
@@ -74,7 +72,6 @@ void MST(std::vector<Vertex> &verts, float inf_max, float dist_max) {
             }
         }
                                     
-        // std::cout<<start<<" and "<<end<<" have new edge c -> p"<<std::endl;
         verts[start].children.push_back(&verts[end]);
         verts[end].parent = &verts[start];
         selected[end] = true;
@@ -82,23 +79,112 @@ void MST(std::vector<Vertex> &verts, float inf_max, float dist_max) {
     }
 }
 
-void traverse(std::vector<Vertex> &cycle, Vertex vert) {
-    // std::cout<<vert.name<<std::endl;
+void traverse_build(std::vector<Vertex> &cycle, Vertex vert) {
     cycle.push_back(vert);
     if (vert.children.size() > 0) {
-        for (Vertex* child : vert.children) {traverse(cycle, *child);}
+        for (Vertex* child : vert.children) {traverse_build(cycle, *child);}
     }
 }
 
-std::vector<Vertex> build_cycle(std::vector<Vertex> &verts) {
-    // helper for recursive traverse
+std::vector<Vertex> build_cycle(std::vector<Vertex> &tree) {
+    // helper for recursive traverse, builds one cycle out of a tree
     std::vector<Vertex> cycle;
-    traverse(cycle, verts[0]);
+    traverse_build(cycle, tree[0]);
     return cycle;
+}
+
+int orientation(float p[], float q[], float r[]) {
+    /*
+    based on https://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect/?ref=lbp
+    p, q, and r are points
+    is (q[1] - p[1]) / (q[0] - p[0]) > (r[1] - q[1]) / (r[0] - q[0]) ?
+    val is the cross product of that inequality
+    */
+    float val = (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1]);
+    if (val > 0) {
+        return 1; // Clockwise orientation
+    } else if (val < 0) {
+        return 2;// Counterclockwise orientation
+    } else {
+        return 0; // Collinear orientation
+    }
+}
+
+// collinear points p, q, r, checks if point r lies on line segment 'pq'
+bool on_segment(float p[], float q[], float r[]) {
+    if (
+         (r[0] <= std::max(p[0], q[0])) &
+         (r[0] >= std::min(p[0], q[0])) &
+         (r[1] <= std::max(p[1], q[1])) &
+         (r[1] >= std::min(p[1], q[1]))
+        ) {
+        return true;
+    }
+    return false;
+}
+
+// returns true if the line segments 'pq' and 'rs' intersect
+bool do_intersect(float p[], float q[], float r[], float s[]) {
+    int pqr = orientation(p, q, r);
+    int pqs = orientation(p, q, s);
+    int rsp = orientation(r, s, p);
+    int rsq = orientation(r, s, q);
+
+    // general case
+    if ((pqr != pqs) & (rsp != rsq)) {
+        return true;
+    }
+
+    // if points are collinear and the third lies on the segment formed
+    // by the first two
+    if (
+        ((pqr == 0) & on_segment(p, q, r)) |
+        ((pqs == 0) & on_segment(p, q, s)) |
+        ((rsp == 0) & on_segment(r, p, s)) |
+        ((rsq == 0) & on_segment(r, s, q))
+        ) {
+        return true;
+    }
+    return false;
+}
+
+void inversion_handle(std::vector<Vertex> &cycle) {
+    // uncrosses any crossed edges by switching the first two vertexes from each
+    if (cycle.size() > 3) {
+        // compare each edge in our cycle to the subsequent edges
+        for (int j = 0; j < cycle.size() - 3; j++) {
+            for (int k = 2; k < cycle.size() - 1; k++) {
+                if (do_intersect(cycle[j].coords, cycle[j + 1].coords, cycle[k].coords, cycle[k + 1].coords)) {
+                    Vertex temp = {
+                        cycle[j].weight,
+                        cycle[j].name,
+                        {cycle[j].coords[0], cycle[j].coords[1]},
+                        cycle[j].parent,
+                        cycle[j].children,
+                    };
+                    cycle[j] = {
+                        cycle[k].weight,
+                        cycle[k].name,
+                        {cycle[k].coords[0], cycle[k].coords[1]},
+                        cycle[k].parent,
+                        cycle[k].children,
+                    };
+                    cycle[k] = {
+                        temp.weight,
+                        temp.name,
+                        {temp.coords[0], temp.coords[1]},
+                        temp.parent,
+                        temp.children,
+                    };
+                }
+            }
+        }
+    }
 }
 
 void row_join(int &rank, int &n_cities, int &n_processes, std::vector<Vertex> &cycle,
             float inf_max, float dist_max, int start, int end) {
+    // stitches sectors in a row into one big cycle on the leftmost process of the row
     int width = (int)sqrt(n_processes);
     int row = rank / width;
     int col = rank % width;
@@ -149,28 +235,12 @@ void row_join(int &rank, int &n_cities, int &n_processes, std::vector<Vertex> &c
                 }
             }
         }
-        std::cout<<"rank "<<rank<<" has vertexes: "<<std::endl;
-        std::cout<<"from cycle: "<<std::endl;
-        for (int i = 0; i < cycle.size(); i++) {
-            std::cout<<"\t"<<cycle[i].name;
-        }
-        std::cout<<std::endl;
-        std::cout<<"from vec_rec_cycle: "<<std::endl;
-        for (int i = 0; i < vec_rec_cycle.size(); i++) {
-            std::cout<<"\t"<<vec_rec_cycle[i].name;
-        }
-        std::cout<<std::endl;
+
         // the joining
         if (r_index > 0) {
             cycle.insert(cycle.begin() + l_index + 1, vec_rec_cycle.begin(), vec_rec_cycle.begin() + r_index + 1);
         }
         cycle.insert(cycle.begin() + l_index + 1, vec_rec_cycle.begin() + r_index + 1, vec_rec_cycle.end());
-        
-        std::cout<<"rank "<<rank<<" has vertexes: "<<std::endl;
-        for (int i = 0; i < cycle.size(); i++) {
-            std::cout<<"\t"<<cycle[i].name;
-        }
-        std::cout<<std::endl;
     }
 
     // send if mid + 1
@@ -191,6 +261,7 @@ void row_join(int &rank, int &n_cities, int &n_processes, std::vector<Vertex> &c
 
 void col_join(int &rank, int &n_cities, int &n_processes, std::vector<Vertex> &cycle,
             float inf_max, float dist_max, int start, int end) {
+    // stitches column together into one big cycle on the uppermost process
     int width = (int)sqrt(n_processes);
     int row = rank / width;
     int range = end - start;
@@ -240,28 +311,12 @@ void col_join(int &rank, int &n_cities, int &n_processes, std::vector<Vertex> &c
                 }
             }
         }
-        std::cout<<"rank "<<rank<<" has vertexes: "<<std::endl;
-        std::cout<<"from cycle: "<<std::endl;
-        for (int i = 0; i < cycle.size(); i++) {
-            std::cout<<"\t"<<cycle[i].name;
-        }
-        std::cout<<std::endl;
-        std::cout<<"from vec_rec_cycle: "<<std::endl;
-        for (int i = 0; i < vec_rec_cycle.size(); i++) {
-            std::cout<<"\t"<<vec_rec_cycle[i].name;
-        }
-        std::cout<<std::endl;
+        
         // the joining
         if (r_index > 0) {
             cycle.insert(cycle.begin() + l_index + 1, vec_rec_cycle.begin(), vec_rec_cycle.begin() + r_index + 1);
         }
         cycle.insert(cycle.begin() + l_index + 1, vec_rec_cycle.begin() + r_index + 1, vec_rec_cycle.end());
-        
-        std::cout<<"rank "<<rank<<" has vertexes: "<<std::endl;
-        for (int i = 0; i < cycle.size(); i++) {
-            std::cout<<"\t"<<cycle[i].name;
-        }
-        std::cout<<std::endl;
     }
 
     // send if mid + 1
@@ -286,6 +341,7 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &n_processes);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     
+    // currently only supports a square # of processes
     if (sqrt((float)n_processes) > (int)sqrt(n_processes) && rank == 0) {
         std::cout<<"Non-square (1, 4, 9, 16, ...) # of processes, use "<<
                 (int)sqrt(n_processes) * (int)sqrt(n_processes)<<" processes instead."<<std::endl;
@@ -295,13 +351,20 @@ int main(int argc, char** argv) {
 
     n_cities = std::stoi(argv[1], nullptr);
     // small discrepancy from equal division - increases n_cities if necessary
+    
     if (n_cities % n_processes != 0) {
-        std::cout<<"Number of cities increased to divide equally among processes\n"<<std::endl;
-        n_cities += n_cities % n_processes;
-        std::cout<<"New number of cities is "<<n_cities<<std::endl;
+        if (rank == 0) {std::cout<<"Number of cities increased to divide equally among processes\n"<<std::endl;}
+        n_cities += n_processes - n_cities % n_processes;
+        if (rank == 0) {std::cout<<"New number of cities is "<<n_cities<<std::endl;}
     }
+    // if (n_cities <  2 * n_processes) {
+    //     if (rank == 0) {std::cout<<"Number of cities increased to two per process. Run with fewer processes"<<
+    //                                                     " if you want to route through fewer cities\n"<<std::endl;}
+    //     n_cities =  2 * n_processes;
+    //     if (rank == 0) {std::cout<<"New number of cities is "<<n_cities<<std::endl;}
+    // }
 
-    // create our cities, compute the max infection and distance edge weights
+    // create our cities, compute the max infection probability and max distance
     std::vector<Vertex> verts;
     gen_verts(rank, n_cities, n_processes, verts);
     float inf_max, dist_max = 0;
@@ -318,19 +381,22 @@ int main(int argc, char** argv) {
             }
         }
     }
-
+    
     float all_inf_max;
     MPI_Reduce(&inf_max, &all_inf_max, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
-
     float all_dist_max;
     MPI_Reduce(&dist_max, &all_dist_max, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
 
     // start timing
-
+    struct timespec start, end;
+    if (rank == 0) {
+        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    }
 
     // build the MST for each process, make cycle out of it
     MST(verts, inf_max, dist_max);
     std::vector<Vertex> cycle = build_cycle(verts);
+    inversion_handle(cycle);
 
     // stitch by row, then column
     row_join(rank, n_cities, n_processes, cycle, inf_max, dist_max, 0, (int)sqrt(n_processes) - 1);
@@ -339,19 +405,22 @@ int main(int argc, char** argv) {
         col_join(rank, n_cities, n_processes, cycle, inf_max, dist_max, 0, (int)sqrt(n_processes) - 1);
     }
 
-    // end timing
+    if (rank == 0) {
+        inversion_handle(cycle);
 
+        // end timing
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+        uint64_t diff = (1000000000L * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec) / 1e6;
+        std::cout<<"Finished in "<<diff<<" ms!"<<std::endl;
 
-    // for (int i = 0; i < n_processes; i++) {
-    //     if (rank == i) {
-    //         std::cout<<"rank is "<<i<<", cycle: "<<std::endl;
-    //         for (int j = 0; j < (n_cities / n_processes); j++) {
-    //             std::cout<<"\t"<<cycle[j].name<<"\t"<<cycle[j].weight<<std::endl;
-    //             std::cout<<"\t"<<cycle[j].coords[0]<<", "<<cycle[j].coords[1]<<std::endl;
-    //         }
-    //     }
-    // }
+        // uncomment to show final path
+        // std::cout<<"start:"<<std::endl;
+        // for (Vertex v: cycle) {
+        //     std::cout<<v.name<<std::endl;
+        // }
+        // std::cout<<"finish"<<std::endl;
+    }
 
     MPI_Finalize();
-    exit(0);
+    return 0;
 }
