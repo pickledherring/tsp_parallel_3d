@@ -357,12 +357,12 @@ int main(int argc, char** argv) {
         n_cities += n_processes - n_cities % n_processes;
         if (rank == 0) {std::cout<<"New number of cities is "<<n_cities<<std::endl;}
     }
-    // if (n_cities <  2 * n_processes) {
-    //     if (rank == 0) {std::cout<<"Number of cities increased to two per process. Run with fewer processes"<<
-    //                                                     " if you want to route through fewer cities\n"<<std::endl;}
-    //     n_cities =  2 * n_processes;
-    //     if (rank == 0) {std::cout<<"New number of cities is "<<n_cities<<std::endl;}
-    // }
+    if (n_cities <  2 * n_processes) {
+        if (rank == 0) {std::cout<<"Number of cities increased to two per process. Run with fewer processes"<<
+                                                        " if you want to route through fewer cities\n"<<std::endl;}
+        n_cities =  2 * n_processes;
+        if (rank == 0) {std::cout<<"New number of cities is "<<n_cities<<std::endl;}
+    }
 
     // create our cities, compute the max infection probability and max distance
     std::vector<Vertex> verts;
@@ -399,12 +399,15 @@ int main(int argc, char** argv) {
     inversion_handle(cycle);
 
     // stitch by row, then column
-    row_join(rank, n_cities, n_processes, cycle, inf_max, dist_max, 0, (int)sqrt(n_processes) - 1);
+    if (n_processes > 1) {
+        row_join(rank, n_cities, n_processes, cycle, inf_max, dist_max, 0, (int)sqrt(n_processes) - 1);
+    }
     MPI_Barrier(MPI_COMM_WORLD);
-    if (rank % (int)sqrt(n_processes) == 0) {
+    if (rank % (int)sqrt(n_processes) == 0 & n_processes > 1) {
         col_join(rank, n_cities, n_processes, cycle, inf_max, dist_max, 0, (int)sqrt(n_processes) - 1);
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
     if (rank == 0) {
         inversion_handle(cycle);
 
@@ -416,9 +419,9 @@ int main(int argc, char** argv) {
         // uncomment to show final path
         // std::cout<<"start:"<<std::endl;
         // for (Vertex v: cycle) {
-        //     std::cout<<v.name<<std::endl;
+        //     std::cout<<"\t"<<v.name;
         // }
-        // std::cout<<"finish"<<std::endl;
+        // std::cout<<"\nfinish"<<std::endl;
     }
 
     MPI_Finalize();
